@@ -37,19 +37,6 @@ func BuildAndSetClients() (versioned.Interface, *clientset.Clientset) {
 	Ω(err).ShouldNot(HaveOccurred())
 	Ω(kubeClient).ShouldNot(BeNil())
 	Logf("Check wether Workflow resource is registered...")
-	/*
-		TODO: check whether CRD is registered
-		Eventually(func() bool {
-			r, err := client.IsWorkflowRegistered(kubeClient, f.ResourceName, f.ResourceGroup, f.ResourceVersion)
-			if err != nil {
-				Logf("Error: %v", err)
-			}
-			return (r && err == nil)
-		}, "5s", "1s").Should(BeTrue())
-		Logf("It is!")
-		resourceName := strings.Join([]string{f.ResourceName, f.ResourceGroup}, ".")
-		thirdPartyResource, err := kubeClient.Extensions().ThirdPartyResources().Get(resourceName)
-	*/
 	workflowClient, err := f.workflowClient()
 	Ω(err).ShouldNot(HaveOccurred())
 	Ω(workflowClient).ShouldNot(BeNil())
@@ -229,9 +216,9 @@ func HONoWorkflowsShouldRemains(workflowClient versioned.Interface, namespace st
 }
 
 // HONoJobsShouldRemains is an higher order func that returns the func that checks whether some jobs are still present
-func HONoJobsShouldRemains(kubeClient clientset.Interface, namespace string) func() error {
+func HONoJobsShouldRemains(kubeClient clientset.Interface, labelSelector, namespace string) func() error {
 	return func() error {
-		jobs, err := kubeClient.Batch().Jobs(namespace).List(metav1.ListOptions{})
+		jobs, err := kubeClient.Batch().Jobs(namespace).List(metav1.ListOptions{LabelSelector: labelSelector})
 		if err != nil {
 			Logf("Cannot list jobs: %v", err)
 			return err
@@ -247,13 +234,13 @@ func HONoJobsShouldRemains(kubeClient clientset.Interface, namespace string) fun
 // HODeleteWorkflow is an higher order func that returns the func to remove the Workflow
 func HODeleteWorkflow(workflowClient versioned.Interface, workflow *wapi.Workflow, namespace string) func() error {
 	return func() error {
-		return workflowClient.WorkflowV1().Workflows(namespace).Delete(workflow.Name, nil)
+		return workflowClient.WorkflowV1().Workflows(namespace).Delete(workflow.Name, controller.CascadeDeleteOptions(0))
 	}
 }
 
 // HOCheckAllStepsFinished is an higher order func that returns func that checks
 // whether all step are finished
-func HOChekcAllStepsFinished(workflowClient versioned.Interface, workflow *wapi.Workflow, namespace string) func() error {
+func HOCheckAllStepsFinished(workflowClient versioned.Interface, workflow *wapi.Workflow, namespace string) func() error {
 	return func() error {
 		w, err := workflowClient.WorkflowV1().Workflows(namespace).Get(workflow.Name, metav1.GetOptions{})
 		if err != nil {

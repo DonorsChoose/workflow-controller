@@ -15,6 +15,17 @@ spec:
       serviceAccount: workflow-controller
       containers:
       - name: workflow-controller
-        image: amadeusitgroup/workflow-controller:latest
+        image: workflowctrl/workflow-controller:latest
         imagePullPolicy: Always
         args: ["--v=2"]
+        livenessProbe:
+          httpGet:
+            path: /live
+            port: 8086
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8086
+          periodSeconds: 5

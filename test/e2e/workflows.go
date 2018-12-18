@@ -10,8 +10,11 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
+	"github.com/amadeusitgroup/workflow-controller/pkg/api/workflow"
 	wapi "github.com/amadeusitgroup/workflow-controller/pkg/api/workflow/v1"
+
 	"github.com/amadeusitgroup/workflow-controller/pkg/client/clientset/versioned"
+	"github.com/amadeusitgroup/workflow-controller/pkg/controller"
 	"github.com/amadeusitgroup/workflow-controller/test/e2e/framework"
 )
 
@@ -45,7 +48,7 @@ var _ = Describe("Workflow CRUD", func() {
 	It("should create a workflow", func() {
 		workflowClient, kubeClient := framework.BuildAndSetClients()
 		ns := api.NamespaceDefault
-		myWorkflow := framework.NewWorkflow("dag.example.com", "v1", "workflow1", ns, nil)
+		myWorkflow := framework.NewWorkflow(workflow.GroupName, "v1", "workflow1", ns, nil)
 		defer func() {
 			deleteWorkflow(workflowClient, myWorkflow)
 			deleteAllJobs(kubeClient, myWorkflow)
@@ -59,7 +62,7 @@ var _ = Describe("Workflow CRUD", func() {
 	It("should default workflow", func() {
 		workflowClient, kubeClient := framework.BuildAndSetClients()
 		ns := api.NamespaceDefault
-		myWorkflow := framework.NewWorkflow("dag.example.com", "v1", "workflow2", ns, nil)
+		myWorkflow := framework.NewWorkflow(workflow.GroupName, "v1", "workflow2", ns, nil)
 		defer func() {
 			deleteWorkflow(workflowClient, myWorkflow)
 			deleteAllJobs(kubeClient, myWorkflow)
@@ -86,7 +89,7 @@ var _ = Describe("Workflow CRUD", func() {
 	It("should run to finish a workflow", func() {
 		workflowClient, kubeClient := framework.BuildAndSetClients()
 		ns := api.NamespaceDefault
-		myWorkflow := framework.NewWorkflow("dag.example.com", "v1", "workflow3", ns, nil)
+		myWorkflow := framework.NewWorkflow(workflow.GroupName, "v1", "workflow3", ns, nil)
 		defer func() {
 			deleteWorkflow(workflowClient, myWorkflow)
 			deleteAllJobs(kubeClient, myWorkflow)
@@ -95,13 +98,13 @@ var _ = Describe("Workflow CRUD", func() {
 
 		Eventually(framework.HOIsWorkflowFinished(workflowClient, myWorkflow, ns), "60s", "5s").ShouldNot(HaveOccurred())
 
-		Eventually(framework.HOChekcAllStepsFinished(workflowClient, myWorkflow, ns), "60s", "5s").ShouldNot(HaveOccurred())
+		Eventually(framework.HOCheckAllStepsFinished(workflowClient, myWorkflow, ns), "60s", "5s").ShouldNot(HaveOccurred())
 	})
 
 	It("should be able to update workflow", func() {
 		workflowClient, kubeClient := framework.BuildAndSetClients()
 		ns := api.NamespaceDefault
-		myWorkflow := framework.NewWorkflowWithThreeSteps("dag.example.com", "v1", "workflow3", ns)
+		myWorkflow := framework.NewWorkflowWithThreeSteps(workflow.GroupName, "v1", "workflow3", ns)
 		defer func() {
 			deleteWorkflow(workflowClient, myWorkflow)
 			deleteAllJobs(kubeClient, myWorkflow)
@@ -133,14 +136,14 @@ var _ = Describe("Workflow CRUD", func() {
 
 		Eventually(framework.HOIsWorkflowFinished(workflowClient, myWorkflow, ns), "40s", "5s").ShouldNot(HaveOccurred())
 
-		Eventually(framework.HOChekcAllStepsFinished(workflowClient, myWorkflow, ns), "40s", "5s").ShouldNot(HaveOccurred())
+		Eventually(framework.HOCheckAllStepsFinished(workflowClient, myWorkflow, ns), "40s", "5s").ShouldNot(HaveOccurred())
 
 	})
 
 	It("should exceed deadline", func() {
 		workflowClient, kubeClient := framework.BuildAndSetClients()
 		ns := api.NamespaceDefault
-		myWorkflow := framework.NewWorkflow("dag.example.com", "v1", "deadlineworkflow", ns, nil)
+		myWorkflow := framework.NewWorkflow(workflow.GroupName, "v1", "deadlineworkflow", ns, nil)
 		threeSecs := int64(3)
 		myWorkflow.Spec.ActiveDeadlineSeconds = &threeSecs // Set deadline
 		defer func() {
@@ -172,7 +175,7 @@ var _ = Describe("Workflow CRUD", func() {
 	It("should remove an invalid workflow", func() {
 		workflowClient, kubeClient := framework.BuildAndSetClients()
 		ns := api.NamespaceDefault
-		myWorkflow := framework.NewWorkflowWithLoop("dag.example.com", "v1", "loopworkflow", ns)
+		myWorkflow := framework.NewWorkflowWithLoop(workflow.GroupName, "v1", "loopworkflow", ns)
 
 		defer func() {
 			deleteWorkflow(workflowClient, myWorkflow)
@@ -187,7 +190,7 @@ var _ = Describe("Workflow CRUD", func() {
 	It("should remove workflow created non empty status", func() {
 		workflowClient, kubeClient := framework.BuildAndSetClients()
 		ns := api.NamespaceDefault
-		myWorkflow := framework.NewWorkflow("dag.example.com", "v1", "nonemptystatus", ns, nil)
+		myWorkflow := framework.NewWorkflow(workflow.GroupName, "v1", "nonemptystatus", ns, nil)
 		now := metav1.Now()
 		myWorkflow.Status = wapi.WorkflowStatus{ // add a non empty status
 			StartTime: &now,
@@ -208,7 +211,7 @@ var _ = Describe("Workflow Garbage Collection", func() {
 		workflowClient, kubeClient := framework.BuildAndSetClients()
 		ns := api.NamespaceDefault
 
-		myWorkflow := framework.NewWorkflowWithThreeSteps("dag.example.com", "v1", "workflow-long", ns)
+		myWorkflow := framework.NewWorkflowWithThreeSteps(workflow.GroupName, "v1", "workflow-long", ns)
 		defer func() {
 			deleteWorkflow(workflowClient, myWorkflow)
 			deleteAllJobs(kubeClient, myWorkflow)
@@ -225,7 +228,8 @@ var _ = Describe("Workflow Garbage Collection", func() {
 		Eventually(framework.HODeleteWorkflow(workflowClient, myWorkflow, ns), "40s", "1s").ShouldNot(HaveOccurred())
 
 		// Check all Jobs have been deleted
-		Eventually(framework.HONoJobsShouldRemains(kubeClient, ns), "90s", "5s").ShouldNot(HaveOccurred())
+		selector := controller.WorkflowLabelKey + "=workflow-long"
+		Eventually(framework.HONoJobsShouldRemains(kubeClient, selector, ns), "90s", "5s").ShouldNot(HaveOccurred())
 
 	})
 })
